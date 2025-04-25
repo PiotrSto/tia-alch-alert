@@ -3,12 +3,18 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import requests
-import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
 
 TELEGRAM_TOKEN = "7696807946:AAFyq_gGVq3yNYI8uM_CBjXhkMrI4Umfw-0"
 CHAT_ID = "1508106512"
+CMC_API_KEY = "53eb73e4-dd42-4a96-9f82-de13bda828bc"
 STATE_FILE = "last_signal.txt"
+
+HEADERS = {
+    "Accepts": "application/json",
+    "X-CMC_PRO_API_KEY": CMC_API_KEY,
+}
 
 def send_telegram_alert(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -19,25 +25,33 @@ def send_telegram_alert(message):
         pass
 
 @st.cache_data(ttl=600)
-def fetch_prices(token_id):
-    url = f"https://api.coingecko.com/api/v3/coins/{token_id}/market_chart?vs_currency=usd&days=7&interval=hourly"
-    response = requests.get(url)
-    data = response.json()
-    return pd.DataFrame(data['prices'], columns=['timestamp', 'price'])
+def fetch_cmc_price_history(symbol):
+    url = f"https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/historical"
+    end_time = int(time.time())
+    start_time = end_time - 7 * 24 * 60 * 60  # 7 dni wstecz
+    params = {
+        "symbol": symbol,
+        "time_start": start_time,
+        "time_end": end_time,
+        "interval": "hourly",
+        "convert": "USD"
+    }
+    r = requests.get(url, headers=HEADERS, params=params)
+    data = r.json()
+    prices = data["data"]["quotes"]
+    df = pd.DataFrame([(q["timestamp"], q["quote"]["USD"]["price"]) for q in prices], columns=["Data", f"{symbol}_price"])
+    df["Data"] = pd.to_datetime(df["Data"])
+    return df
 
-st.set_page_config(page_title="TIA/ALCH – CoinGecko App", layout="wide")
-st.title("📈 TIA/ALCH – Wykres i alerty z CoinGecko (24/7 Telegram)")
+st.set_page_config(page_title="TIA/ALCH – CoinMarketCap App", layout="wide")
+st.title("📈 TIA/ALCH – Dane z CoinMarketCap + alerty Telegram 24/7")
 
 try:
-    tia_df = fetch_prices("celestia")
-    alch_df = fetch_prices("alchemist-ai")
+    tia_df = fetch_cmc_price_history("TIA")
+    alch_df = fetch_cmc_price_history("ALCH")
 
-    for df in [tia_df, alch_df]:
-        df['Data'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df.drop(columns='timestamp', inplace=True)
-
-    df = pd.merge(tia_df, alch_df, on="Data", suffixes=("_TIA", "_ALCH"))
-    df["Stosunek"] = df["price_TIA"] / df["price_ALCH"]
+    df = pd.merge(tia_df, alch_df, on="Data")
+    df["Stosunek"] = df["TIA_price"] / df["ALCH_price"]
 
     srednia = df["Stosunek"].mean()
     std = df["Stosunek"].std()
@@ -75,12 +89,12 @@ try:
     ax.axhline(srednia, color="gray", linestyle="--", label="Średnia")
     ax.axhline(gorna, color="red", linestyle="--", label="Kup ALCH")
     ax.axhline(dolna, color="green", linestyle="--", label="Kup TIA")
-    ax.set_title("Stosunek TIA/ALCH – CoinGecko (1h)")
+    ax.set_title("Stosunek TIA/ALCH – CoinMarketCap (1h)")
     ax.legend()
     st.pyplot(fig)
 
     st.subheader(f"Sygnał: {signal}")
     st.caption(momentum_signal)
-    st.caption("Dane z CoinGecko, odświeżane co 10 minut")
+    st.caption("Dane z CoinMarketCap, odświeżane co 10 minut")
 except:
-    st.error("Błąd w pobieraniu danych z CoinGecko. Spróbuj później.")
+    st.error("Błąd w pobieraniu danych z CoinMarketCap. Sprawdź połączenie lub API.")
