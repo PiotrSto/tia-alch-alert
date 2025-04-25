@@ -18,29 +18,26 @@ def send_telegram_alert(message):
     except:
         pass
 
-def fetch_kline(symbol, interval="60", limit=168):
-    url = f"https://api.bybit.com/v5/market/kline?category=linear&symbol={symbol}&interval={interval}&limit={limit}"
+@st.cache_data(ttl=600)
+def fetch_prices(token_id):
+    url = f"https://api.coingecko.com/api/v3/coins/{token_id}/market_chart?vs_currency=usd&days=7&interval=hourly"
     response = requests.get(url)
     data = response.json()
-    raw = data["result"]["list"]
-    df = pd.DataFrame(raw, columns=[
-        "timestamp", "open", "high", "low", "close", "volume", "turnover"
-    ])
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-    df["close"] = pd.to_numeric(df["close"], errors="coerce")
-    return df[["timestamp", "close"]].rename(columns={"timestamp": "Data", "close": f"{symbol}_close"})
+    return pd.DataFrame(data['prices'], columns=['timestamp', 'price'])
 
-st.set_page_config(page_title="TIA/ALCH – Alert System", layout="wide")
-st.title("📈 TIA/ALCH – Live Alert System 24/7 (ByBit + Telegram)")
+st.set_page_config(page_title="TIA/ALCH – CoinGecko App", layout="wide")
+st.title("📈 TIA/ALCH – Wykres i alerty z CoinGecko (24/7 Telegram)")
 
-tia_df = fetch_kline("TIAUSDT")
-alch_df = fetch_kline("ALCHUSDT")
+try:
+    tia_df = fetch_prices("celestia")
+    alch_df = fetch_prices("alchemist-ai")
 
-if tia_df.empty or alch_df.empty:
-    st.error("Brak danych z ByBit.")
-else:
-    df = pd.merge(tia_df, alch_df, on="Data")
-    df["Stosunek"] = df["TIAUSDT_close"] / df["ALCHUSDT_close"]
+    for df in [tia_df, alch_df]:
+        df['Data'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.drop(columns='timestamp', inplace=True)
+
+    df = pd.merge(tia_df, alch_df, on="Data", suffixes=("_TIA", "_ALCH"))
+    df["Stosunek"] = df["price_TIA"] / df["price_ALCH"]
 
     srednia = df["Stosunek"].mean()
     std = df["Stosunek"].std()
@@ -55,11 +52,10 @@ else:
     else:
         signal = "🟡 Trzymaj"
 
-    momentum_df = df.tail(12)
-    zmiana_12h = (momentum_df["Stosunek"].iloc[-1] - momentum_df["Stosunek"].iloc[0]) / momentum_df["Stosunek"].iloc[0] * 100
-    if zmiana_12h > 2:
+    zmiana = (df["Stosunek"].iloc[-1] - df["Stosunek"].iloc[-12]) / df["Stosunek"].iloc[-12] * 100
+    if zmiana > 2:
         momentum_signal = "⚡ Szybki wzrost – rozważ sprzedaż ALCH"
-    elif zmiana_12h < -2:
+    elif zmiana < -2:
         momentum_signal = "⚡ Szybki spadek – rozważ sprzedaż TIA"
     else:
         momentum_signal = "⚡ Bez silnego trendu"
@@ -79,9 +75,12 @@ else:
     ax.axhline(srednia, color="gray", linestyle="--", label="Średnia")
     ax.axhline(gorna, color="red", linestyle="--", label="Kup ALCH")
     ax.axhline(dolna, color="green", linestyle="--", label="Kup TIA")
-    ax.set_title("Stosunek TIA/ALCH – ByBit (1h)")
+    ax.set_title("Stosunek TIA/ALCH – CoinGecko (1h)")
     ax.legend()
     st.pyplot(fig)
 
     st.subheader(f"Sygnał: {signal}")
     st.caption(momentum_signal)
+    st.caption("Dane z CoinGecko, odświeżane co 10 minut")
+except:
+    st.error("Błąd w pobieraniu danych z CoinGecko. Spróbuj później.")
