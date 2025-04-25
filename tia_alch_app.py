@@ -1,6 +1,7 @@
 
 import streamlit as st
 import requests
+import matplotlib.pyplot as plt
 
 TELEGRAM_TOKEN = "7696807946:AAFyq_gGVq3yNYI8uM_CBjXhkMrI4Umfw-0"
 CHAT_ID = "1508106512"
@@ -28,8 +29,8 @@ def get_price(symbol):
     data = r.json()
     return data["data"][symbol]["quote"]["USD"]["price"]
 
-st.set_page_config(page_title="TIA/ALCH – Alert Live", layout="wide")
-st.title("📊 TIA/ALCH – Prosty alert z CoinMarketCap (live)")
+st.set_page_config(page_title="TIA/ALCH – Wizualny Alert", layout="wide")
+st.title("📊 TIA/ALCH – Wizualny alert z CoinMarketCap")
 
 try:
     tia = get_price("TIA")
@@ -40,13 +41,19 @@ try:
     st.metric("Cena ALCH (USD)", f"${alch:.4f}")
     st.metric("Stosunek TIA / ALCH", f"{ratio:.2f}")
 
-    # Ustal sygnał na podstawie progu
-    if ratio > 17:
+    # Progi decyzyjne
+    upper = 17.0
+    lower = 15.5
+
+    if ratio > upper:
         signal = "🔴 Kup ALCH za TIA"
-    elif ratio < 15.5:
+        color = "red"
+    elif ratio < lower:
         signal = "🟢 Kup TIA za ALCH"
+        color = "green"
     else:
         signal = "🟡 Trzymaj"
+        color = "orange"
 
     st.subheader(f"Sygnał: {signal}")
 
@@ -60,6 +67,19 @@ try:
         with open(STATE_FILE, "w") as f:
             f.write(signal)
 
-    st.caption("Dane z CoinMarketCap, odświeżane co 10 minut")
+    # WIZUALIZACJA POZIOMÓW
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.set_xlim(14.5, 18.5)
+    ax.axvspan(14.5, lower, color="green", alpha=0.2, label="Kup TIA za ALCH")
+    ax.axvspan(lower, upper, color="orange", alpha=0.2, label="Trzymaj")
+    ax.axvspan(upper, 18.5, color="red", alpha=0.2, label="Kup ALCH za TIA")
+    ax.axvline(ratio, color=color, linewidth=3, label=f"Aktualny: {ratio:.2f}")
+    ax.set_title("📍 Pozycja TIA/ALCH względem progów decyzyjnych")
+    ax.set_xlabel("Stosunek TIA / ALCH")
+    ax.get_yaxis().set_visible(False)
+    ax.legend()
+    st.pyplot(fig)
+
+    st.caption("Dane z CoinMarketCap, odświeżane co 10 minut – z wizualizacją")
 except:
     st.error("Błąd pobierania danych z CoinMarketCap")
