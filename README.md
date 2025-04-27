@@ -1,9 +1,7 @@
+# TIA/ALCH Tracker
 
-# TIA/ALCH Visual Alert – Streamlit + Telegram + Wykres Pozycji
-
-Instrukcja:
-1. Wgraj pliki do repozytorium na GitHub
-2. Uruchom w Streamlit Cloud
-3. Otrzymuj alerty Telegram + wizualny wykres z aktualną pozycją
-
-Źródło danych: CoinMarketCap
+Aplikacja Streamlit do monitorowania stosunku TIA/ALCH.
+Zawiera:
+- Sygnały Kup/Sprzedaj/Trzymaj
+- Wykrywanie odwrócenia trendu ⭐
+- Dane z CoinMarketCap lub ByBit

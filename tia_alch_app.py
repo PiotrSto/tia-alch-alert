@@ -1,85 +1,56 @@
-
 import streamlit as st
-import requests
+import pandas as pd
 import matplotlib.pyplot as plt
+import requests
 
-TELEGRAM_TOKEN = "7696807946:AAFyq_gGVq3yNYI8uM_CBjXhkMrI4Umfw-0"
-CHAT_ID = "1508106512"
-CMC_API_KEY = "53eb73e4-dd42-4a96-9f82-de13bda828bc"
-STATE_FILE = "last_signal.txt"
+st.set_page_config(page_title="TIA/ALCH Tracker ByBit", layout="wide")
+st.title("📊 TIA/ALCH – Live Tracker (USD, ByBit)")
 
-HEADERS = {
-    "Accepts": "application/json",
-    "X-CMC_PRO_API_KEY": CMC_API_KEY,
-}
+@st.cache_data(ttl=300)
+def fetch_price_data(symbol: str, limit: int = 168):
+    url = "https://api.bybit.com/v5/market/kline"
+    params = {"category": "spot", "symbol": symbol, "interval": "60", "limit": limit}
+    response = requests.get(url, params=params)
+    data = response.json()
+    df = pd.DataFrame(data["result"]["list"], columns=[
+        "timestamp", "open", "high", "low", "close", "volume", "turnover"
+    ])
+    df["timestamp"] = pd.to_datetime(df["timestamp"].astype(int), unit='ms')
+    df["close"] = df["close"].astype(float)
+    return df[["timestamp", "close"]].sort_values("timestamp").reset_index(drop=True)
 
-def send_telegram_alert(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": message}
-    try:
-        requests.post(url, data=data)
-    except:
-        pass
+tia_df = fetch_price_data("TIAUSDT")
+alch_df = fetch_price_data("ALCHUSDT")
 
-@st.cache_data(ttl=600)
-def get_price(symbol):
-    url = f"https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
-    params = {"symbol": symbol, "convert": "USD"}
-    r = requests.get(url, headers=HEADERS, params=params)
-    data = r.json()
-    return data["data"][symbol]["quote"]["USD"]["price"]
+df = pd.merge(tia_df, alch_df, on="timestamp", suffixes=("_TIA", "_ALCH"))
+df["ratio"] = df["close_TIA"] / df["close_ALCH"]
+mean = df["ratio"].mean()
+std = df["ratio"].std()
+upper = mean + std
+lower = mean - std
 
-st.set_page_config(page_title="TIA/ALCH – Wizualny Alert", layout="wide")
-st.title("📊 TIA/ALCH – Wizualny alert z CoinMarketCap")
+last_row = df.iloc[-1]
+last_time = last_row["timestamp"]
+last_ratio = last_row["ratio"]
 
-try:
-    tia = get_price("TIA")
-    alch = get_price("ALCH")
-    ratio = tia / alch
+if last_ratio > upper:
+    signal = "🔴 Kup ALCH za TIA"
+elif last_ratio < lower:
+    signal = "🟢 Kup TIA za ALCH"
+else:
+    signal = "🟡 Trzymaj"
 
-    st.metric("Cena TIA (USD)", f"${tia:.4f}")
-    st.metric("Cena ALCH (USD)", f"${alch:.4f}")
-    st.metric("Stosunek TIA / ALCH", f"{ratio:.2f}")
-
-    # Progi decyzyjne
-    upper = 17.0
-    lower = 15.5
-
-    if ratio > upper:
-        signal = "🔴 Kup ALCH za TIA"
-        color = "red"
-    elif ratio < lower:
-        signal = "🟢 Kup TIA za ALCH"
-        color = "green"
-    else:
-        signal = "🟡 Trzymaj"
-        color = "orange"
-
-    st.subheader(f"Sygnał: {signal}")
-
-    try:
-        with open(STATE_FILE, "r") as f:
-            last_signal = f.read().strip()
-    except:
-        last_signal = ""
-    if signal != last_signal:
-        send_telegram_alert(f"[ALERT TIA/ALCH]\nSygnał: {signal}\nStosunek: {ratio:.2f}")
-        with open(STATE_FILE, "w") as f:
-            f.write(signal)
-
-    # WIZUALIZACJA POZIOMÓW
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.set_xlim(14.5, 18.5)
-    ax.axvspan(14.5, lower, color="green", alpha=0.2, label="Kup TIA za ALCH")
-    ax.axvspan(lower, upper, color="orange", alpha=0.2, label="Trzymaj")
-    ax.axvspan(upper, 18.5, color="red", alpha=0.2, label="Kup ALCH za TIA")
-    ax.axvline(ratio, color=color, linewidth=3, label=f"Aktualny: {ratio:.2f}")
-    ax.set_title("📍 Pozycja TIA/ALCH względem progów decyzyjnych")
-    ax.set_xlabel("Stosunek TIA / ALCH")
-    ax.get_yaxis().set_visible(False)
-    ax.legend()
-    st.pyplot(fig)
-
-    st.caption("Dane z CoinMarketCap, odświeżane co 10 minut – z wizualizacją")
-except:
-    st.error("Błąd pobierania danych z CoinMarketCap")
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.plot(df["timestamp"], df["ratio"], label="TIA/ALCH", color="orange")
+ax.axhline(mean, linestyle="--", color="gray", label="Średnia")
+ax.axhline(upper, linestyle="--", color="red", label="+1σ (kup ALCH)")
+ax.axhline(lower, linestyle="--", color="green", label="-1σ (kup TIA)")
+ax.plot(last_time, last_ratio, marker="o", color="blue", markersize=8, label="Aktualna wartość")
+ax.set_title("Stosunek TIA/ALCH – dane ByBit")
+ax.set_xlabel("Data")
+ax.set_ylabel("Stosunek TIA/ALCH")
+plt.xticks(rotation=45)
+plt.legend()
+plt.tight_layout()
+st.pyplot(fig)
+st.markdown(f"### 📌 Obecny stosunek: **{last_ratio:.2f}** &nbsp;&nbsp;&nbsp; {signal}")
