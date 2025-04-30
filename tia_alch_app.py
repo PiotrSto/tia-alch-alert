@@ -73,7 +73,9 @@ now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 new_row = pd.DataFrame([[now, tia_price, alch_price, ratio, signal]], 
     columns=["timestamp", "tia", "alch", "ratio", "signal"])
 if os.path.exists(history_file):
-    pd.read_csv(history_file).append(new_row).to_csv(history_file, index=False)
+    df_old = pd.read_csv(history_file)
+    df_new = pd.concat([df_old, new_row], ignore_index=True)
+    df_new.to_csv(history_file, index=False)
 else:
     new_row.to_csv(history_file, index=False)
 
