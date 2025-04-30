@@ -1,4 +1,4 @@
-# TIA/ALCH Streamlit App (v2) - z aktualizacją co minutę, lepszym UI i strategiami
+# TIA/ALCH Streamlit App (v3) - z Telegramem, wskaźnikami i historią
 
 import streamlit as st
 import pandas as pd
@@ -6,39 +6,33 @@ import requests
 import time
 import plotly.graph_objs as go
 from datetime import datetime
+import os
 
-# === Ustawienia ===
+# Telegram config
+BOT_TOKEN = "7696807946:AAFyq_gGVq3yNYI8uM_CBjXhkMrI4Umfw-0"
+CHAT_ID = "1508106512"
+
+# Ustawienia
 st.set_page_config(page_title="TIA/ALCH Monitor", layout="wide")
-
 COIN_1 = "tia"
 COIN_2 = "alch"
 VS_CURRENCY = "usd"
-REFRESH_EVERY = 60  # sekundy
+REFRESH_EVERY = 60
 
-# === API Key CoinMarketCap ===
 API_KEY = "53eb73e4-dd42-4a96-9f82-de13bda828bc"
 HEADERS = {"X-CMC_PRO_API_KEY": API_KEY}
 
-# === Funkcje pomocnicze ===
+# Funkcje
 @st.cache_data(ttl=REFRESH_EVERY)
 def fetch_prices():
-    url = f"https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
+    url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
     symbols = f"{COIN_1},{COIN_2}"
     params = {"symbol": symbols.upper(), "convert": VS_CURRENCY.upper()}
     response = requests.get(url, headers=HEADERS, params=params)
     data = response.json()
-    tia_price = data["data"][COIN_1.upper()]["quote"][VS_CURRENCY.upper()]["price"]
-    alch_price = data["data"][COIN_2.upper()]["quote"][VS_CURRENCY.upper()]["price"]
-    return tia_price, alch_price
-
-
-def calculate_indicators(price_series):
-    df = pd.Series(price_series).to_frame("price")
-    df["EMA20"] = df["price"].ewm(span=20).mean()
-    df["EMA50"] = df["price"].ewm(span=50).mean()
-    df["RSI"] = compute_rsi(df["price"])
-    return df
-
+    tia = data["data"][COIN_1.upper()]["quote"][VS_CURRENCY.upper()]["price"]
+    alch = data["data"][COIN_2.upper()]["quote"][VS_CURRENCY.upper()]["price"]
+    return tia, alch
 
 def compute_rsi(series, period=14):
     delta = series.diff()
@@ -47,50 +41,71 @@ def compute_rsi(series, period=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
+def calculate_indicators(prices):
+    df = pd.Series(prices).to_frame("price")
+    df["EMA20"] = df["price"].ewm(span=20).mean()
+    df["EMA50"] = df["price"].ewm(span=50).mean()
+    df["EMA200"] = df["price"].ewm(span=200).mean()
+    df["RSI"] = compute_rsi(df["price"])
+    return df
 
-def generate_strategy(ratio):
+def generate_signal(ratio):
     if ratio > 1.15:
-        return "➡️ Zamień 25% TIA na ALCH - możliwe wykupienie TIA"
+        return "🔴 Zamień 25% TIA na ALCH"
     elif ratio < 0.85:
-        return "⬅️ Zamień 25% ALCH na TIA - możliwe wyprzedanie TIA"
+        return "🟢 Zamień 25% ALCH na TIA"
     else:
-        return "🤝 Trzymaj - brak wyraźnego sygnału"
+        return "🟡 Trzymaj pozycję"
 
+def send_telegram_message(text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": text}
+    requests.post(url, data=payload)
 
-# === Layout ===
-st.title("📈 TIA/ALCH Monitor - Live v2")
+# Ceny
+tia_price, alch_price = fetch_prices()
+ratio = tia_price / alch_price
+signal = generate_signal(ratio)
+
+# Historia
+history_file = "history.csv"
+now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+new_row = pd.DataFrame([[now, tia_price, alch_price, ratio, signal]], 
+    columns=["timestamp", "tia", "alch", "ratio", "signal"])
+if os.path.exists(history_file):
+    pd.read_csv(history_file).append(new_row).to_csv(history_file, index=False)
+else:
+    new_row.to_csv(history_file, index=False)
+
+# Telegram
+if signal != "🟡 Trzymaj pozycję":
+    msg = f"{signal}
+TIA: ${tia_price:.4f}
+ALCH: ${alch_price:.4f}
+Stosunek: {ratio:.4f}"
+    send_telegram_message(msg)
+
+# Interfejs
+st.title("📈 TIA/ALCH Monitor v3")
 
 col1, col2, col3 = st.columns(3)
-
 with col1:
-    st.markdown("### Cena TIA")
-    tia_price, alch_price = fetch_prices()
-    st.metric("TIA", f"${tia_price:.4f}")
-
+    st.metric("Cena TIA", f"${tia_price:.4f}")
 with col2:
-    st.markdown("### Cena ALCH")
-    st.metric("ALCH", f"${alch_price:.4f}")
-
+    st.metric("Cena ALCH", f"${alch_price:.4f}")
 with col3:
-    ratio = tia_price / alch_price
-    st.markdown("### Stosunek TIA / ALCH")
-    st.metric("TIA/ALCH", f"{ratio:.4f}")
+    st.metric("Stosunek TIA/ALCH", f"{ratio:.4f}")
 
-st.divider()
+st.subheader("🔍 Sygnał Strategiczny")
+st.success(signal)
 
 # Wykres
-prices_df = pd.DataFrame({"TIA": [tia_price], "ALCH": [alch_price], "timestamp": [datetime.now()]})
-st.markdown("#### Wykres TIA/ALCH (1 punkt)")
+st.subheader("📊 Wykres Stosunku")
+df_chart = pd.read_csv(history_file)
 fig = go.Figure()
-fig.add_trace(go.Scatter(x=prices_df["timestamp"], y=prices_df["TIA"] / prices_df["ALCH"],
-                         mode="markers+lines", name="TIA/ALCH"))
-fig.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=0))
+fig.add_trace(go.Scatter(x=df_chart["timestamp"], y=df_chart["ratio"], mode="lines+markers", name="TIA/ALCH"))
 st.plotly_chart(fig, use_container_width=True)
 
-# Strategia
-st.divider()
-st.markdown("### 🔍 Sygnał Strategiczny")
-strategy = generate_strategy(ratio)
-st.info(strategy)
-
-st.caption(f"Ostatnia aktualizacja: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+# Historia
+st.subheader("🗂 Historia Strategii")
+st.dataframe(df_chart.tail(10), use_container_width=True)
