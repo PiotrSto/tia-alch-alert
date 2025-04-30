@@ -1,9 +1,16 @@
+# TIA/ALCH Streamlit App
 
-# TIA/ALCH Visual Alert – Streamlit + Telegram + Wykres Pozycji
+Monitoruj stosunek cen TIA do ALCH z wykorzystaniem CoinMarketCap API.
 
-Instrukcja:
-1. Wgraj pliki do repozytorium na GitHub
-2. Uruchom w Streamlit Cloud
-3. Otrzymuj alerty Telegram + wizualny wykres z aktualną pozycją
+## Funkcje:
+- Aktualizacja danych co minutę
+- Przejrzysty interfejs z metrykami
+- Automatyczne strategie wymiany
+- Wskaźniki EMA i RSI
 
-Źródło danych: CoinMarketCap
+## Uruchomienie
+1. Zainstaluj zależności: `pip install -r requirements.txt`
+2. Uruchom aplikację: `streamlit run main.py`
+
+## API Key
+W kodzie domyślnie ustawiony jest klucz API do CoinMarketCap. Możesz go podmienić w zmiennej `API_KEY`.
