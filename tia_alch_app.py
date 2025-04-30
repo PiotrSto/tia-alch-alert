@@ -79,10 +79,7 @@ else:
 
 # Telegram
 if signal != "🟡 Trzymaj pozycję":
-    msg = f"{signal}
-TIA: ${tia_price:.4f}
-ALCH: ${alch_price:.4f}
-Stosunek: {ratio:.4f}"
+    msg = f"{signal}\nTIA: ${tia_price:.4f}\nALCH: ${alch_price:.4f}\nStosunek: {ratio:.4f}"
     send_telegram_message(msg)
 
 # Interfejs
