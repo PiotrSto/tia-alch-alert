@@ -49,10 +49,14 @@ def calculate_indicators(prices):
     df["RSI"] = compute_rsi(df["price"])
     return df
 
+
+# Konfiguracja portfela użytkownika
+wallet = {"TIA": 0, "ALCH": 100}  # Możesz zmienić np. na {"TIA": 100, "ALCH": 0} albo {"TIA": 50, "ALCH": 50"}
+
 def generate_signal(ratio):
-    if ratio > 1.15:
+    if ratio > 1.15 and wallet["TIA"] > 0:
         return "🔴 Zamień 25% TIA na ALCH"
-    elif ratio < 0.85:
+    elif ratio < 0.85 and wallet["ALCH"] > 0:
         return "🟢 Zamień 25% ALCH na TIA"
     else:
         return "🟡 Trzymaj pozycję"
@@ -102,7 +106,31 @@ st.success(signal)
 st.subheader("📊 Wykres Stosunku")
 df_chart = pd.read_csv(history_file)
 fig = go.Figure()
-fig.add_trace(go.Scatter(x=df_chart["timestamp"], y=df_chart["ratio"], mode="lines+markers", name="TIA/ALCH"))
+
+# Dodanie kolorowych punktów sygnału
+for i, row in df_chart.iterrows():
+    color = "blue"
+    if "ALCH" in row["signal"]:
+        color = "red"
+    elif "TIA" in row["signal"]:
+        color = "green"
+    fig.add_trace(go.Scatter(
+        x=[row["timestamp"]],
+        y=[row["ratio"]],
+        mode="markers",
+        marker=dict(color=color, size=10),
+        name=row["signal"],
+        showlegend=False
+    ))
+
+# Linia główna
+fig.add_trace(go.Scatter(
+    x=df_chart["timestamp"],
+    y=df_chart["ratio"],
+    mode="lines",
+    name="TIA/ALCH",
+    line=dict(width=2)
+))
 st.plotly_chart(fig, use_container_width=True)
 
 # Historia
