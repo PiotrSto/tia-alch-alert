@@ -1,95 +1,102 @@
 
+# TIA/ALCH App v7 – z aktualnym stanem portfela i logiczną strategią zamiany
+
 import streamlit as st
 import pandas as pd
 import requests
-import plotly.graph_objs as go
+import matplotlib.pyplot as plt
 from datetime import datetime
-import os
 
-# Stan portfela
-wallet = {"TIA": 4202.48, "ALCH": 0}
+# Stan portfela po ostatniej transakcji
+wallet = {
+    "TIA": 4202.48 - 1050.61,  # pozostało po konwersji
+    "ALCH": 15117.82           # otrzymane z wymiany
+}
 
-# API CoinMarketCap
-API_KEY = "53eb73e4-dd42-4a96-9f82-de13bda828bc"
-HEADERS = {"X-CMC_PRO_API_KEY": API_KEY}
-REFRESH_EVERY = 60
-history_file = "history.csv"
+# Konfiguracja API
+API_URL = "https://api.bybit.com/v5/market/kline"
 
-st.set_page_config(page_title="TIA/ALCH Tracker", layout="wide")
+@st.cache_data(ttl=300)
+def fetch_price_data(symbol: str, limit: int = 168):
+    params = {
+        "category": "spot",
+        "symbol": symbol,
+        "interval": "60",
+        "limit": limit
+    }
+    try:
+        response = requests.get(API_URL, params=params)
+        data = response.json()
+        df = pd.DataFrame(data["result"]["list"], columns=[
+            "timestamp", "open", "high", "low", "close", "volume", "turnover"
+        ])
+        df["timestamp"] = pd.to_datetime(df["timestamp"].astype(int), unit='ms')
+        df["close"] = df["close"].astype(float)
+        return df[["timestamp", "close"]].sort_values("timestamp").reset_index(drop=True)
+    except:
+        return pd.DataFrame(columns=["timestamp", "close"])
 
-@st.cache_data(ttl=REFRESH_EVERY)
-def fetch_prices():
-    url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
-    params = {"symbol": "TIA,ALCH", "convert": "USD"}
-    r = requests.get(url, headers=HEADERS, params=params)
-    data = r.json()
-    tia = data["data"]["TIA"]["quote"]["USD"]["price"]
-    alch = data["data"]["ALCH"]["quote"]["USD"]["price"]
-    return tia, alch
+# Pobieranie danych
+st.set_page_config(page_title="TIA/ALCH Live Tracker", layout="wide")
+st.title("📊 TIA/ALCH – Strategiczny Monitor Portfela")
+tia_df = fetch_price_data("TIAUSDT")
+alch_df = fetch_price_data("ALCHUSDT")
 
-# Sygnał na podstawie aktualnego stanu portfela
-def generate_signal(ratio):
-    if ratio > 1.15 and wallet["TIA"] > 0:
-        return "🔴 Zamień część TIA na ALCH"
-    else:
-        return "🟡 Trzymaj"
+if tia_df.empty or alch_df.empty:
+    st.error("Brak danych z ByBit – sprawdź połączenie API.")
+    st.stop()
 
-# Pobranie danych
-tia_price, alch_price = fetch_prices()
-ratio = tia_price / alch_price
-signal = generate_signal(ratio)
-now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-row = pd.DataFrame([[now, tia_price, alch_price, ratio, signal]],
-                   columns=["timestamp", "tia", "alch", "ratio", "signal"])
+# Obliczenia
+merged = pd.merge(tia_df, alch_df, on="timestamp", suffixes=("_TIA", "_ALCH"))
+merged["ratio"] = merged["close_TIA"] / merged["close_ALCH"]
+mean = merged["ratio"].mean()
+std = merged["ratio"].std()
+upper = mean + std
+lower = mean - std
 
-# Historia
-if os.path.exists(history_file):
-    old = pd.read_csv(history_file)
-    combined = pd.concat([old, row], ignore_index=True)
+last = merged.iloc[-1]
+last_ratio = last["ratio"]
+last_time = last["timestamp"]
+
+# Sygnał
+if last_ratio > upper:
+    signal = "🔴 Zamień część TIA na ALCH"
+elif last_ratio < lower:
+    signal = "🟢 Zamień część ALCH na TIA"
 else:
-    combined = row
-combined.to_csv(history_file, index=False)
-
-# UI
-st.title("📊 TIA/ALCH Tracker – wersja z portfelem")
-
-col1, col2, col3 = st.columns(3)
-col1.metric("Cena TIA", f"${tia_price:.4f}")
-col2.metric("Cena ALCH", f"${alch_price:.4f}")
-col3.metric("Stosunek TIA/ALCH", f"{ratio:.4f}")
-
-st.markdown("### Stan portfela")
-st.write(f'**TIA**: {wallet["TIA"]} | **ALCH**: {wallet["ALCH"]}')
-
-# Szacowana wartość wymiany (jeśli sygnał aktywny)
-if "Zamień" in signal:
-    tia_do_sprzedania = wallet["TIA"] * 0.25
-    alch_do_otrzymania = tia_do_sprzedania * ratio
-    st.info(f"Rekomendacja: wymień **{tia_do_sprzedania:.2f} TIA** na **{alch_do_otrzymania:.2f} ALCH**")
-
-st.markdown("### Sygnał")
-st.success(signal)
+    signal = "🟡 Trzymaj"
 
 # Wykres
-df_chart = combined.copy()
-df_chart["timestamp"] = pd.to_datetime(df_chart["timestamp"])
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df_chart["timestamp"], y=df_chart["ratio"],
-                         mode="lines+markers", name="TIA/ALCH"))
+fig, ax = plt.subplots(figsize=(12, 5))
+ax.plot(merged["timestamp"], merged["ratio"], label="TIA/ALCH", color="orange")
+ax.axhline(mean, linestyle="--", color="gray", label="Średnia")
+ax.axhline(upper, linestyle="--", color="red", label="+1σ")
+ax.axhline(lower, linestyle="--", color="green", label="-1σ")
+ax.plot(last_time, last_ratio, "o", color="blue", label="Obecnie")
+ax.set_title("Stosunek TIA/ALCH z ByBit (1h)")
+ax.legend()
+ax.grid(True)
+st.pyplot(fig)
 
-# Kolorowe punkty
-for i, row in df_chart.iterrows():
-    color = "yellow"
-    if "TIA" in row["signal"]:
-        color = "red"
-    fig.add_trace(go.Scatter(
-        x=[row["timestamp"]], y=[row["ratio"]],
-        mode="markers", marker=dict(color=color, size=10),
-        showlegend=False
-    ))
+# Interfejs portfela
+st.markdown("### 💼 Stan portfela")
+st.write(f"**TIA:** {wallet['TIA']:.2f}  ")
+st.write(f"**ALCH:** {wallet['ALCH']:.2f}  ")
 
-fig.update_layout(height=400, margin=dict(t=30))
-st.plotly_chart(fig, use_container_width=True)
+# Sygnał + sugestia
+st.markdown("### 📌 Obecny sygnał")
+st.success(signal)
 
-st.markdown("### Historia")
-st.dataframe(df_chart.tail(10), use_container_width=True)
+# Sugestia działania
+if "ALCH" in signal and wallet["ALCH"] > 0:
+    alch_to_swap = wallet["ALCH"] * 0.25
+    tia_recv = alch_to_swap / last_ratio
+    st.info(f"Sugerowana konwersja: zamień {alch_to_swap:.2f} ALCH na ~{tia_recv:.2f} TIA")
+elif "TIA" in signal and wallet["TIA"] > 0:
+    tia_to_swap = wallet["TIA"] * 0.25
+    alch_recv = tia_to_swap * last_ratio
+    st.info(f"Sugerowana konwersja: zamień {tia_to_swap:.2f} TIA na ~{alch_recv:.2f} ALCH")
+else:
+    st.info("Obecnie brak zalecanej akcji – obserwuj rynek.")
+
+st.caption(f"Dane z ByBit • Aktualizacja: {last_time.strftime('%Y-%m-%d %H:%M')} • Stosunek: {last_ratio:.2f}")
