@@ -10,34 +10,36 @@ if "tia" not in st.session_state:
 if "alch" not in st.session_state:
     st.session_state.alch = 15117.82
 
+KUCOIN_URL = "https://api.kucoin.com/api/v1/market/candles"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-def fetch_mexc_ohlc(symbol: str, interval: str = "1h", limit: int = 168):
-    url = f"https://api.mexc.com/api/v3/klines"
-    params = {"symbol": symbol, "interval": interval, "limit": limit}
+def fetch_kucoin_data(symbol: str, interval: str = "1hour", limit: int = 168):
+    params = {
+        "type": interval,
+        "symbol": symbol
+    }
     try:
-        r = requests.get(url, headers=HEADERS, params=params)
+        r = requests.get(KUCOIN_URL, headers=HEADERS, params=params)
         r.raise_for_status()
-        raw = r.json()
+        raw = r.json()["data"]
         df = pd.DataFrame(raw, columns=[
-            "timestamp", "open", "high", "low", "close", "volume", "close_time",
-            "quote_volume", "trades", "taker_base_vol", "taker_quote_vol", "ignore"
+            "timestamp", "open", "close", "high", "low", "volume", "turnover"
         ])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        df["timestamp"] = pd.to_datetime(df["timestamp"].astype(float), unit="s")
         df["close"] = df["close"].astype(float)
-        return df[["timestamp", "close"]]
+        return df[["timestamp", "close"]].sort_values("timestamp").tail(limit)
     except Exception as e:
-        st.error(f"❌ Błąd pobierania danych z MEXC: {e}")
+        st.error(f"❌ Błąd pobierania danych z KuCoin: {e}")
         return pd.DataFrame(columns=["timestamp", "close"])
 
-st.set_page_config(page_title="TIA/ALCH Cloud MEXC", layout="wide")
-st.title("📊 TIA/ALCH – Wersja Chmurowa z Historią z MEXC")
+st.set_page_config(page_title="TIA/ALCH Cloud KuCoin", layout="wide")
+st.title("📊 TIA/ALCH – Wersja Chmurowa z Historią z KuCoin")
 
-tia_df = fetch_mexc_ohlc("TIAUSDT")
-alch_df = fetch_mexc_ohlc("ALCHUSDT")
+tia_df = fetch_kucoin_data("TIA-USDT")
+alch_df = fetch_kucoin_data("ALCH-USDT")
 
 if tia_df.empty or alch_df.empty:
-    st.error("Brak danych z MEXC.")
+    st.error("Brak danych z KuCoin.")
     st.stop()
 
 df = pd.merge(tia_df, alch_df, on="timestamp", suffixes=("_TIA", "_ALCH"))
@@ -59,7 +61,7 @@ ax.axhline(mean, color="gray", linestyle="--", label="Średnia")
 ax.axhline(upper, color="red", linestyle="--", label="+1σ (Kup ALCH)")
 ax.axhline(lower, color="green", linestyle="--", label="-1σ (Kup TIA)")
 ax.plot(now, ratio, "o", color="blue", label="Obecnie")
-ax.set_title("Stosunek TIA/ALCH – dane MEXC (1h)")
+ax.set_title("Stosunek TIA/ALCH – dane KuCoin (1h)")
 ax.legend()
 ax.grid(True)
 st.pyplot(fig)
@@ -111,4 +113,4 @@ elif ratio < lower and st.session_state.alch > 0:
 else:
     st.info("🟡 Trzymaj – brak zalecanej akcji.")
 
-st.caption(f"Dane z MEXC • Stosunek: {ratio:.2f} • Aktualizacja: {now.strftime('%Y-%m-%d %H:%M')}")
+st.caption(f"Dane z KuCoin • Stosunek: {ratio:.2f} • Aktualizacja: {now.strftime('%Y-%m-%d %H:%M')}")
