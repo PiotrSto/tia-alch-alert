@@ -10,9 +10,11 @@ if "tia" not in st.session_state:
 if "alch" not in st.session_state:
     st.session_state.alch = 15117.82
 
-API_KEY = "53eb73e4-dd42-4a96-9f82-de13bda828bc"
+CMC_KEY = "53eb73e4-dd42-4a96-9f82-de13bda828bc"
 CMC_URL = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
-HEADERS = {"X-CMC_PRO_API_KEY": API_KEY}
+HEADERS = {"X-CMC_PRO_API_KEY": CMC_KEY}
+
+BYBIT_URL = "https://api.bybit.com/v5/market/kline"
 
 @st.cache_data(ttl=300)
 def fetch_prices():
@@ -23,29 +25,47 @@ def fetch_prices():
     alch = data["data"]["ALCH"]["quote"]["USD"]["price"]
     return tia, alch
 
-st.set_page_config(page_title="TIA/ALCH Cloud Final", layout="wide")
-st.title("📊 TIA/ALCH – Finalna Wersja Chmurowa")
+@st.cache_data(ttl=600)
+def fetch_bybit_history():
+    def get_df(symbol):
+        r = requests.get(BYBIT_URL, params={
+            "category": "spot", "symbol": symbol,
+            "interval": "60", "limit": 200
+        })
+        data = r.json()["result"]["list"]
+        df = pd.DataFrame(data, columns=[
+            "timestamp", "open", "high", "low", "close", "volume", "turnover"
+        ])
+        df["timestamp"] = pd.to_datetime(df["timestamp"].astype(int), unit="ms")
+        df["close"] = df["close"].astype(float)
+        return df[["timestamp", "close"]]
+    tia_df = get_df("TIAUSDT")
+    alch_df = get_df("ALCHUSDT")
+    return pd.merge(tia_df, alch_df, on="timestamp", suffixes=("_TIA", "_ALCH"))
+
+st.set_page_config(page_title="TIA/ALCH Cloud ByBit", layout="wide")
+st.title("📊 TIA/ALCH – Chmurowa Wersja z Historią z ByBit")
 
 tia_price, alch_price = fetch_prices()
-ratio = tia_price / alch_price
-
-# Symulowana historia
-ratios = [ratio + (i - 10) * 0.1 for i in range(21)]
-timestamps = pd.date_range(end=datetime.now(), periods=21, freq="H")
-df = pd.DataFrame({"timestamp": timestamps, "ratio": ratios})
+df = fetch_bybit_history()
+df["ratio"] = df["close_TIA"] / df["close_ALCH"]
 
 mean = df["ratio"].mean()
 std = df["ratio"].std()
 upper = mean + std
 lower = mean - std
 
+last = df.iloc[-1]
+ratio = last["ratio"]
+now = last["timestamp"]
+
 fig, ax = plt.subplots(figsize=(12, 5))
 ax.plot(df["timestamp"], df["ratio"], label="TIA/ALCH", color="orange")
 ax.axhline(mean, color="gray", linestyle="--", label="Średnia")
 ax.axhline(upper, color="red", linestyle="--", label="+1σ (Kup ALCH)")
 ax.axhline(lower, color="green", linestyle="--", label="-1σ (Kup TIA)")
-ax.plot(timestamps[-1], ratio, "o", color="blue", label="Obecnie")
-ax.set_title("TIA/ALCH – CoinMarketCap")
+ax.plot(now, ratio, "o", color="blue", label="Obecnie")
+ax.set_title("TIA/ALCH – ByBit + CMC")
 ax.legend()
 ax.grid(True)
 st.pyplot(fig)
@@ -97,4 +117,4 @@ elif ratio < lower and st.session_state.alch > 0:
 else:
     st.info("🟡 Trzymaj – brak zalecanej akcji.")
 
-st.caption(f"Źródło: CoinMarketCap • Stosunek: {ratio:.2f} • TIA: ${tia_price:.4f} • ALCH: ${alch_price:.4f}")
+st.caption(f"Źródło: CMC + ByBit • Stosunek: {ratio:.2f} • TIA: ${tia_price:.4f} • ALCH: ${alch_price:.4f}")
