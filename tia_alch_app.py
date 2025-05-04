@@ -23,8 +23,8 @@ def fetch_prices():
     alch = data["data"]["ALCH"]["quote"]["USD"]["price"]
     return tia, alch
 
-st.set_page_config(page_title="TIA/ALCH Cloud Manual", layout="wide")
-st.title("📊 TIA/ALCH – Chmurowa Wersja z Ręcznym Portfelem")
+st.set_page_config(page_title="TIA/ALCH Cloud Final", layout="wide")
+st.title("📊 TIA/ALCH – Finalna Wersja Chmurowa")
 
 tia_price, alch_price = fetch_prices()
 ratio = tia_price / alch_price
@@ -50,7 +50,11 @@ ax.legend()
 ax.grid(True)
 st.pyplot(fig)
 
-st.markdown("### 💼 Portfel (edycja)")
+st.markdown("### 💼 Portfel (obecny stan)")
+st.write(f"TIA: {st.session_state.tia:.2f}")
+st.write(f"ALCH: {st.session_state.alch:.2f}")
+
+st.markdown("### ✏️ Edytuj portfel")
 with st.form("edit_wallet_form"):
     new_tia = st.number_input("TIA:", value=st.session_state.tia, format="%.2f")
     new_alch = st.number_input("ALCH:", value=st.session_state.alch, format="%.2f")
@@ -60,9 +64,8 @@ with st.form("edit_wallet_form"):
         st.success("Zaktualizowano portfel.")
         st.rerun()
 
-# Ręczny formularz przed/po
+st.markdown("### ✍️ Ręczne wpisanie wymiany")
 with st.form("manual_swap_form"):
-    st.markdown("### ✍️ Ręczne wpisanie wymiany")
     direction = st.radio("Rodzaj zamiany", ["TIA → ALCH", "ALCH → TIA"])
     give_amount = st.number_input("Ilość przed wymianą", min_value=0.0, format="%.2f")
     receive_amount = st.number_input("Ilość po wymianie", min_value=0.0, format="%.2f")
@@ -82,7 +85,6 @@ with st.form("manual_swap_form"):
         else:
             st.error("Za mało środków na tę operację.")
 
-# Sygnał
 st.markdown("### 📌 Sygnał")
 if ratio > upper and st.session_state.tia > 0:
     swap = st.session_state.tia * 0.25
