@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import requests
 
-st.set_page_config(page_title="TIA/ALCH – BITGET", layout="wide")
+st.set_page_config(page_title="TIA/ALCH – GATEIO", layout="wide")
 
 if "tia" not in st.session_state:
     st.session_state.tia = 3151.87
@@ -22,13 +22,13 @@ def fetch_price_df(symbol_url):
         df["close"] = df.iloc[:, 1].astype(float)
         return df[["timestamp", "close"]].sort_values("timestamp").tail(168)
     except Exception as e:
-        st.error(f"Błąd pobierania danych z BITGET: {e}")
+        st.error(f"Błąd pobierania danych z GATEIO: {e}")
         return pd.DataFrame(columns=["timestamp", "close"])
 
-st.title("📊 TIA/ALCH – BITGET")
+st.title("📊 TIA/ALCH – GATEIO")
 
-tia_url = "https://api.bitget.com/api/spot/v1/market/candles?symbol=TIAUSDT&period=1H&limit=168"
-alch_url = "https://api.bitget.com/api/spot/v1/market/candles?symbol=ALCHUSDT&period=1H&limit=168"
+tia_url = "https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=TIA_USDT&interval=1h&limit=168"
+alch_url = "https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=ALCH_USDT&interval=1h&limit=168"
 
 tia_df = fetch_price_df(tia_url)
 alch_df = fetch_price_df(alch_url)
