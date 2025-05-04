@@ -62,10 +62,10 @@ st.subheader("📌 Sygnał")
 if ratio > upper and st.session_state.tia > 0:
     amt = st.session_state.tia * 0.25
     out = amt * ratio
-    st.success(f"🔴 Zamień 25% TIA ({amt:.2f}) → {out:.2f} ALCH")
+    st.success("🔴 Sygnał: kup ALCH za TIA")
 elif ratio < lower and st.session_state.alch > 0:
     amt = st.session_state.alch * 0.25
     out = amt / ratio
-    st.success(f"🟢 Zamień 25% ALCH ({amt:.2f}) → {out:.2f} TIA")
+    st.success("🟢 Sygnał: kup TIA za ALCH")
 else:
-    st.info("🟡 Brak akcji – trzymaj pozycję.")
+    st.info("🟡 Sygnał: trzymaj")
