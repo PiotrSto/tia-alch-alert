@@ -10,39 +10,36 @@ if "tia" not in st.session_state:
 if "alch" not in st.session_state:
     st.session_state.alch = 15117.82
 
-API_URL = "https://api.bybit.com/v5/market/kline"
+BINANCE_URL = "https://api.binance.com/api/v3/klines"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 @st.cache_data(ttl=300)
-def fetch_price_data(symbol: str, limit: int = 168):
-    params = {
-        "category": "spot",
-        "symbol": symbol,
-        "interval": "60",
-        "limit": limit
-    }
+def fetch_binance_data(symbol: str, interval: str = "1h", limit: int = 168):
+    params = {"symbol": symbol, "interval": interval, "limit": limit}
     try:
-        r = requests.get(API_URL, params=params, headers=HEADERS)
+        r = requests.get(BINANCE_URL, params=params, headers=HEADERS)
         r.raise_for_status()
-        data = r.json()
-        df = pd.DataFrame(data["result"]["list"], columns=[
-            "timestamp", "open", "high", "low", "close", "volume", "turnover"
+        raw = r.json()
+        df = pd.DataFrame(raw, columns=[
+            "timestamp", "open", "high", "low", "close", "volume", "close_time",
+            "quote_asset_volume", "num_trades", "taker_buy_base_volume",
+            "taker_buy_quote_volume", "ignore"
         ])
-        df["timestamp"] = pd.to_datetime(df["timestamp"].astype(int), unit='ms')
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df["close"] = df["close"].astype(float)
         return df[["timestamp", "close"]]
     except Exception as e:
-        st.error(f"❌ Błąd pobierania danych z ByBit: {e}")
+        st.error(f"❌ Błąd pobierania danych z Binance: {e}")
         return pd.DataFrame(columns=["timestamp", "close"])
 
-st.set_page_config(page_title="TIA/ALCH Cloud ByBit", layout="wide")
-st.title("📊 TIA/ALCH – Wersja Chmurowa z Historią z ByBit (naprawiona)")
+st.set_page_config(page_title="TIA/ALCH Binance Cloud", layout="wide")
+st.title("📊 TIA/ALCH – Chmurowa Wersja z Historią z Binance")
 
-tia_df = fetch_price_data("TIAUSDT")
-alch_df = fetch_price_data("ALCHUSDT")
+tia_df = fetch_binance_data("TIAUSDT")
+alch_df = fetch_binance_data("ALCHUSDT")
 
 if tia_df.empty or alch_df.empty:
-    st.error("Brak danych z ByBit.")
+    st.error("Brak danych z Binance.")
     st.stop()
 
 df = pd.merge(tia_df, alch_df, on="timestamp", suffixes=("_TIA", "_ALCH"))
@@ -64,7 +61,7 @@ ax.axhline(mean, color="gray", linestyle="--", label="Średnia")
 ax.axhline(upper, color="red", linestyle="--", label="+1σ (Kup ALCH)")
 ax.axhline(lower, color="green", linestyle="--", label="-1σ (Kup TIA)")
 ax.plot(now, ratio, "o", color="blue", label="Obecnie")
-ax.set_title("Stosunek TIA/ALCH – dane ByBit (1h)")
+ax.set_title("Stosunek TIA/ALCH – dane Binance (1h)")
 ax.legend()
 ax.grid(True)
 st.pyplot(fig)
@@ -116,4 +113,4 @@ elif ratio < lower and st.session_state.alch > 0:
 else:
     st.info("🟡 Trzymaj – brak zalecanej akcji.")
 
-st.caption(f"Dane z ByBit • Stosunek: {ratio:.2f} • Aktualizacja: {now.strftime('%Y-%m-%d %H:%M')}")
+st.caption(f"Dane z Binance • Stosunek: {ratio:.2f} • Aktualizacja: {now.strftime('%Y-%m-%d %H:%M')}")
