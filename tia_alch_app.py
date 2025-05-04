@@ -1,7 +1,7 @@
 
-# Placeholder pod giełdę BITGET
-# Endpoint: https://api.bitget.com/api/v2/market/candles
+# Placeholder pod giełdę BITMART
+# Endpoint: https://api-cloud.bitmart.com/spot/v1/symbols/kline
 
 import streamlit as st
-st.title("📊 TIA/ALCH – Cloud App for BITGET")
-st.write("Tu będzie implementacja API: https://api.bitget.com/api/v2/market/candles")
+st.title("📊 TIA/ALCH – Cloud App for BITMART")
+st.write("Tu będzie implementacja API: https://api-cloud.bitmart.com/spot/v1/symbols/kline")
