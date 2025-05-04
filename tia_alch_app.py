@@ -50,15 +50,11 @@ ax.legend()
 ax.grid(True)
 st.pyplot(fig)
 
-st.markdown("### 💼 Portfel")
-st.write(f"TIA: {st.session_state.tia:.2f}")
-st.write(f"ALCH: {st.session_state.alch:.2f}")
-
-# Ręczna edycja portfela
-with st.expander("🛠️ Edytuj portfel ręcznie"):
-    new_tia = st.number_input("Nowa wartość TIA", value=st.session_state.tia, format="%.2f")
-    new_alch = st.number_input("Nowa wartość ALCH", value=st.session_state.alch, format="%.2f")
-    if st.button("Zapisz zmiany portfela"):
+st.markdown("### 💼 Portfel (edycja)")
+with st.form("edit_wallet_form"):
+    new_tia = st.number_input("TIA:", value=st.session_state.tia, format="%.2f")
+    new_alch = st.number_input("ALCH:", value=st.session_state.alch, format="%.2f")
+    if st.form_submit_button("Zapisz nowy portfel"):
         st.session_state.tia = new_tia
         st.session_state.alch = new_alch
         st.success("Zaktualizowano portfel.")
