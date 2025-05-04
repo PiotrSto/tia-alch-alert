@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import requests
 
-st.set_page_config(page_title="TIA/ALCH – BINGX", layout="wide")
+st.set_page_config(page_title="TIA/ALCH – HTX", layout="wide")
 
 if "tia" not in st.session_state:
     st.session_state.tia = 3151.87
@@ -22,13 +22,13 @@ def fetch_price_df(symbol_url):
         df["close"] = df.iloc[:, 1].astype(float)
         return df[["timestamp", "close"]].sort_values("timestamp").tail(168)
     except Exception as e:
-        st.error(f"Błąd pobierania danych z BINGX: {e}")
+        st.error(f"Błąd pobierania danych z HTX: {e}")
         return pd.DataFrame(columns=["timestamp", "close"])
 
-st.title("📊 TIA/ALCH – BINGX")
+st.title("📊 TIA/ALCH – HTX")
 
-tia_url = "https://open-api.bingx.com/openApi/market/kline?symbol=TIA-USDT&interval=1h&limit=168"
-alch_url = "https://open-api.bingx.com/openApi/market/kline?symbol=ALCH-USDT&interval=1h&limit=168"
+tia_url = "https://api.huobi.pro/market/history/kline?symbol=tiausdt&period=60min&size=168"
+alch_url = "https://api.huobi.pro/market/history/kline?symbol=alchusdt&period=60min&size=168"
 
 tia_df = fetch_price_df(tia_url)
 alch_df = fetch_price_df(alch_url)
