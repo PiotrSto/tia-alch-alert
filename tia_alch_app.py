@@ -1,7 +1,7 @@
 
-# Placeholder pod giełdę BINGX
-# Endpoint: https://open-api.bingx.com/openApi/market/kline
+# Placeholder pod giełdę BITGET
+# Endpoint: https://api.bitget.com/api/v2/market/candles
 
 import streamlit as st
-st.title("📊 TIA/ALCH – Cloud App for BINGX")
-st.write("Tu będzie implementacja API: https://open-api.bingx.com/openApi/market/kline")
+st.title("📊 TIA/ALCH – Cloud App for BITGET")
+st.write("Tu będzie implementacja API: https://api.bitget.com/api/v2/market/candles")
